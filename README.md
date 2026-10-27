@@ -11,6 +11,7 @@ Installer interattivi che trasformano un Raspberry Pi o un PC Ubuntu in un **dis
 - [Panoramica](#panoramica)
 - [Requisiti](#requisiti)
 - [Installazione rapida](#installazione-rapida)
+- [Installazione manuale](#installazione-manuale)
 - [Calendario Web (CSV → pagina HTML)](#calendario-web-csv--pagina-html)
   - [Come funziona](#come-funziona)
   - [Formato del CSV](#formato-del-csv)
@@ -44,6 +45,13 @@ Installer interattivi che trasformano un Raspberry Pi o un PC Ubuntu in un **dis
 - **Connessione a internet** (per scaricare il CSV nel Calendario Web).
 
 ## Installazione rapida
+
+```bash
+bash <(wget -oQ- https://raw.githubusercontent.com/picoder-web/apa-calendario-dipendenti/refs/heads/main/install.sh)
+```
+
+
+## Installazione manuale
 
 ```bash
 git clone https://github.com/picoder-web/apa-calendario.git

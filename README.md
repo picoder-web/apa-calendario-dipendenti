@@ -47,7 +47,7 @@ Installer interattivi che trasformano un Raspberry Pi o un PC Ubuntu in un **dis
 ## Installazione rapida
 
 ```bash
-bash <(wget -oQ- https://raw.githubusercontent.com/picoder-web/apa-calendario-dipendenti/refs/heads/main/install.sh)
+bash -c "$(wget -qO- https://raw.githubusercontent.com/picoder-web/apa-calendario-dipendenti/main/install.sh)"
 ```
 
 

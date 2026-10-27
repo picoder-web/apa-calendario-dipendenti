@@ -26,25 +26,12 @@ Installer interattivi che trasformano un Raspberry Pi o un PC Ubuntu in un **dis
 
 ## Panoramica
 
-Il repository contiene due installer indipendenti:
-
-| | **Calendario Web** | **Calendario a due monitor** |
-|---|---|---|
-| Installer | `install-calendario-web.sh` | `install.sh` |
-| Cosa fa | Mostra una tabella calendario costruita da un file **CSV** (ad esempio un foglio Google pubblicato sul web) in una finestra a schermo intero sul **monitor primario** | Apre due finestre a schermo intero, una sul monitor **di sinistra** e una su quello **di destra**, ognuna con un proprio link. Parte solo se i monitor sono esattamente 2 |
-| Versione | 1.1 | 2.1 |
-| Cartella di installazione | `~/calendario-web` | `~/calendario` |
-
-Le due applicazioni possono essere installate sulla stessa macchina, ma **non conviene attivare l'avvio automatico di entrambe**: l'installer del Calendario Web ti avvisa se trova già quello a due monitor.
-
-Caratteristiche comuni:
-
-- avvio automatico dopo l'accesso al desktop, con un'attesa configurabile e un terminale che mostra lo stato;
-- rilevamento dei monitor con `xrandr` e verifica che la finestra sia davvero sullo schermo giusto (con correzione automatica tramite `xdotool` / `wmctrl`);
-- supervisione silenziosa ogni 2 minuti: se qualcosa non va, le finestre vengono chiuse e l'errore viene registrato;
-- chiusura delle finestre anche con **Ctrl+C**, con segnale di terminazione o chiudendo il terminale;
-- due file di log: uno completo e uno solo con gli errori, con rotazione automatica;
-- l'installer riconosce se si tratta di una **nuova installazione o di un aggiornamento** e propone come valori predefiniti quelli inseriti la volta precedente.
+| | **Calendario Web** |
+|---|---|
+| Installer | `install.sh` |
+| Cosa fa | Mostra una tabella calendario costruita da un file **CSV** (ad esempio un foglio Google pubblicato sul web) in una finestra a schermo intero sul **monitor primario** |
+| Versione | 1.1 |
+| Cartella di installazione | `~/calendario-web` |
 
 ## Requisiti
 

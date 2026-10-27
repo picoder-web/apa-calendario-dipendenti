@@ -1,42 +1,42 @@
 #!/bin/bash
-[ -z "$BASH_VERSION" ] && exec bash "$0" "$@"
+[ -z "$BASH_VERSION" ] && { [ -f "$0" ] && exec bash "$0" "$@"; echo "Esegui l'installer con bash." >&2; exit 1; }
 # ==============================================================================
-# Installer Interattivo: Calendario Web (pagina HTML + CSV) in Chromium
+# APA Calendario Dipendenti - Installer interattivo
+# Pagina HTML con dati da CSV, mostrata a schermo intero in Chromium
 # per Raspberry Pi / Ubuntu
 # ==============================================================================
-VERSIONE_INSTALLER="1.1"
+VERSIONE_INSTALLER="1.0"
 
 # Novità mostrate quando questo installer aggiorna una versione precedente
 # (aggiungi una riga per ogni modifica della versione corrente)
-NOVITA=(
-    "risolto l'errore CORS: il CSV viene scaricato da un piccolo server locale (server.py) e passato alla pagina"
-    "se internet non è disponibile viene usata l'ultima copia salvata del CSV (entro un limite di ore)"
-    "il calendario si apre sempre sul monitor primario (la scelta del monitor è stata rimossa)"
-    "la console del browser (array del CSV, risposte, errori) e il server scrivono nel log completo e in error.log"
-)
+NOVITA=()
 
 # Va eseguito con il proprio utente: se lanciato con sudo, si rilancia come utente normale
+# (possibile solo se l'installer è un file, non se è lanciato con: bash -c "$(wget ...)")
 if [ "$(id -u)" -eq 0 ]; then
-    if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
+    if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ] && [ -f "$0" ]; then
         exec sudo -u "$SUDO_USER" env HOME="$(getent passwd "$SUDO_USER" | cut -d: -f6)" \
             bash "$(readlink -f "$0")" "$@"
     fi
-    echo "Errore: esegui l'installer con il tuo utente, non come root." >&2
+    echo "Errore: esegui l'installer con il tuo utente, senza sudo." >&2
     exit 1
 fi
 
 # Percorsi principali
+COMANDO="apa-calendario-dipendenti"                       # comando da terminale
 USER_HOME="$HOME"
-TARGET_DIR="$USER_HOME/calendario-web"
+TARGET_DIR="$USER_HOME/apa-calendario-dipendenti"
 LOG_DIR="$TARGET_DIR/logs"
-SCRIPT_NAME="calendario-web.sh"
+SCRIPT_NAME="apa-calendario-dipendenti.sh"
 SCRIPT_PATH="$TARGET_DIR/$SCRIPT_NAME"
 PAGE_NAME="calendario.html"
 PAGE_PATH="$TARGET_DIR/$PAGE_NAME"
 SERVER_PATH="$TARGET_DIR/server.py"
+BIN_DIR="$USER_HOME/.local/bin"
+COMANDO_PATH="$BIN_DIR/$COMANDO"
+MARCATORE_PATH="apa-calendario-dipendenti-path"           # riga aggiunta a ~/.bashrc (se serve)
 AUTOSTART_DIR="$USER_HOME/.config/autostart"
-AUTOSTART_FILE="$AUTOSTART_DIR/calendario-web.desktop"
-AUTOSTART_DUAL="$AUTOSTART_DIR/calendario-dual.desktop"   # installer a due monitor (se presente)
+AUTOSTART_FILE="$AUTOSTART_DIR/apa-calendario-dipendenti.desktop"
 
 # Colori per Output Terminale (usati dopo la schermata iniziale)
 CLR_RESET="\e[0m"
@@ -54,7 +54,7 @@ DEF_DELAY="10"          # secondi di attesa dopo l'avvio del desktop
 mostra_header() {
     clear
     echo "============================================================"
-    echo "        INSTALLER INTERATTIVO: CALENDARIO WEB (CSV)"
+    echo "     INSTALLER INTERATTIVO: APA CALENDARIO DIPENDENTI"
     echo "                       versione $VERSIONE_INSTALLER"
     echo "============================================================"
     echo
@@ -73,10 +73,9 @@ leggi_var() {   # leggi_var NOME  (dallo script installato)
     esac
 }
 
-leggi_pagina() {   # leggi_pagina url|refresh  (dalla pagina installata)
+leggi_pagina() {   # leggi_pagina refresh  (dalla pagina installata)
     [ -f "$PAGE_PATH" ] || return 0
     case "$1" in
-        url)     sed -n 's/^ *var url = "\(.*\)";.*/\1/p' "$PAGE_PATH" | head -n1 ;;
         refresh) local ms; ms=$(sed -n 's/^ *var refresh_ms = \([0-9][0-9]*\);.*/\1/p' "$PAGE_PATH" | head -n1)
                  [ -n "$ms" ] && echo $((ms / 1000)) ;;
     esac
@@ -84,12 +83,7 @@ leggi_pagina() {   # leggi_pagina url|refresh  (dalla pagina installata)
 
 carica_precedenti() {
     VER_ATT=$(leggi_var VERSIONE_SCRIPT)
-    P_CSV=$(leggi_var CSV_URL)
-    if [ -z "$P_CSV" ]; then    # versione 1.0: il link era scritto nella pagina
-        P_CSV=$(leggi_pagina url)
-        case "$P_CSV" in http://*|https://*) ;; *) P_CSV="" ;; esac
-    fi
-    P_CSV="${P_CSV:-$DEF_CSV}"
+    P_CSV=$(leggi_var CSV_URL);        P_CSV="${P_CSV:-$DEF_CSV}"
     P_REFRESH=$(leggi_pagina refresh); P_REFRESH="${P_REFRESH:-$DEF_REFRESH}"
     P_DELAY=$(leggi_var DELAY);        P_DELAY="${P_DELAY:-$DEF_DELAY}"
     # Avvio automatico: se c'è già un'installazione si riparte dalla scelta fatta (file presente = sì)
@@ -151,15 +145,6 @@ conferma_declassamento() {   # ritorna 1 se l'utente rinuncia
     return 1
 }
 
-avvisa_installazione_dual() {   # evita di avere due avvii automatici di Chromium
-    if [ -f "$AUTOSTART_DUAL" ]; then
-        echo -e "${CLR_WARN}AVVISO: è presente anche l'avvio automatico del calendario a due monitor:${CLR_RESET}"
-        echo -e "        $AUTOSTART_DUAL"
-        echo -e "        Se non vuoi aprire entrambi all'accesso, rimuovilo con: rm \"$AUTOSTART_DUAL\""
-        echo
-    fi
-}
-
 # ------------------------------------------------------------------------------
 funzione_purge() {
     echo -e "${CLR_WARN}--> [PURGE] RIMOZIONE DI TUTTI I FILE DELL'APPLICAZIONE...${CLR_RESET}"
@@ -167,6 +152,16 @@ funzione_purge() {
     if [ -f "$AUTOSTART_FILE" ]; then
         rm -f "$AUTOSTART_FILE"
         echo -e "    - Rimosso file di avvio automatico ($AUTOSTART_FILE)."
+    fi
+
+    if [ -L "$COMANDO_PATH" ] || [ -f "$COMANDO_PATH" ]; then
+        rm -f "$COMANDO_PATH"
+        echo -e "    - Rimosso il comando ($COMANDO_PATH)."
+    fi
+
+    if [ -f "$USER_HOME/.bashrc" ] && grep -q "$MARCATORE_PATH" "$USER_HOME/.bashrc"; then
+        sed -i "/$MARCATORE_PATH\$/d" "$USER_HOME/.bashrc"
+        echo -e "    - Rimossa da ~/.bashrc la riga che aggiungeva ~/.local/bin al PATH."
     fi
 
     if [ -d "$TARGET_DIR" ]; then
@@ -512,7 +507,7 @@ genera_server() {
     cat > "$SERVER_PATH" << 'FINE_SERVER'
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Server locale del calendario web.
+"""Server locale di APA Calendario Dipendenti.
 
 Serve la pagina calendario.html e fa da "ponte" verso il CSV remoto: il browser
 non puo' leggere direttamente il CSV di Google (blocco CORS), quindi lo scarica
@@ -564,7 +559,7 @@ def log(livello, msg):
 def scarica_csv():
     richiesta = urllib.request.Request(
         args.csv_url,
-        headers={"User-Agent": "Mozilla/5.0 (calendario-web)", "Accept": "text/csv,*/*"},
+        headers={"User-Agent": "Mozilla/5.0 (apa-calendario-dipendenti)", "Accept": "text/csv,*/*"},
     )
     t0 = time.time()
     with urllib.request.urlopen(richiesta, timeout=args.timeout) as r:
@@ -600,7 +595,7 @@ def leggi_copia():
 
 
 class Gestore(BaseHTTPRequestHandler):
-    server_version = "calendario-web"
+    server_version = "apa-calendario-dipendenti"
 
     def log_message(self, fmt, *a):   # il log lo gestiamo noi
         pass
@@ -706,7 +701,7 @@ genera_script() {
 #!/bin/bash
 [ -z "\$BASH_VERSION" ] && exec bash "\$0" "\$@"
 
-# ---- CONFIGURAZIONE (scritta da install-calendario-web.sh v$VERSIONE_INSTALLER) -----
+# ---- CONFIGURAZIONE (scritta da install.sh v$VERSIONE_INSTALLER) -----
 VERSIONE_SCRIPT="$VERSIONE_INSTALLER"   # letta dall'installer per riconoscere gli aggiornamenti
 CSV_URL="$R_CSV"    # link del CSV: lo scarica il server locale (server.py)
 DELAY=$R_DELAY              # secondi di attesa prima di iniziare
@@ -751,6 +746,34 @@ CACHE_CSV="$DIR_APP/dati-cache.csv"
 PROFILO="$DIR_APP/profilo"              # cartella non nascosta: necessario per Chromium snap
 
 mkdir -p "$DIR_LOGS"
+
+# ---- OPZIONI DA RIGA DI COMANDO (comando: apa-calendario-dipendenti) ----
+mostra_aiuto() {
+    cat << EOF_AIUTO
+apa-calendario-dipendenti v$VERSIONE_SCRIPT
+
+Uso: apa-calendario-dipendenti [opzione]
+
+  (nessuna)    avvia il calendario (attende $DELAY s, poi apre Chromium)
+  --subito     avvia il calendario senza l'attesa iniziale
+  --log        mostra il log completo in tempo reale (Ctrl+C per uscire)
+  --errori     mostra in tempo reale solo il log degli errori
+  --versione   mostra la versione
+  --aiuto      mostra questo testo
+
+Cartella dell'applicazione: $DIR_APP
+Per cambiare link CSV, intervallo o avvio automatico rilancia l'installer (opzione 2).
+EOF_AIUTO
+}
+case "$1" in
+    "")                ;;
+    --subito)          DELAY=0 ;;
+    --aiuto|-h|--help) mostra_aiuto; exit 0 ;;
+    --versione|-v)     echo "apa-calendario-dipendenti v$VERSIONE_SCRIPT"; exit 0 ;;
+    --log)             touch "$LOG_FULL"; exec tail -n 50 -f "$LOG_FULL" ;;
+    --errori)          touch "$LOG_ERR"; exec tail -n 50 -f "$LOG_ERR" ;;
+    *)                 echo "Opzione sconosciuta: $1 (usa --aiuto)" >&2; exit 1 ;;
+esac
 
 # ---- COLORI OUTPUT TERMINALE --------------------------------------------
 C_RST="\e[0m"
@@ -1019,7 +1042,7 @@ avvia_server() {
     setsid python3 -u "$SERVER_PY" \
         --dir "$DIR_APP" --port "$PORTA" --csv-url "$CSV_URL" \
         --cache "$CACHE_CSV" --log-full "$LOG_FULL" --log-err "$LOG_ERR" \
-        --timeout "$TIMEOUT_CSV" --max-stale "$((COPIA_MAX_ORE * 3600))" 2>>"$OUT_SRV" &
+        --timeout "$TIMEOUT_CSV" --max-stale "$((COPIA_MAX_ORE * 3600))" 2>>"$OUT_SRV" 9>&- &
     PID_SRV=$!
     local n
     for ((n = 0; n < 20; n++)); do
@@ -1030,9 +1053,26 @@ avvia_server() {
     return 1
 }
 
+# ---- Una sola istanza alla volta (avvio automatico, comando da terminale...) ----
+if command -v flock >/dev/null; then
+    exec 9>"$DIR_APP/.lock"
+    if ! flock -n 9; then
+        log_warn "Il calendario è già in esecuzione (avvio automatico o altro terminale): non avvio una seconda copia."
+        exit 1
+    fi
+fi
+
+# Processi rimasti da un'esecuzione interrotta in modo brusco (kill -9, spegnimento forzato...)
+if pgrep -f -- "$PROFILO" >/dev/null 2>&1 || pgrep -f -- "$SERVER_PY" >/dev/null 2>&1; then
+    log_warn "Trovati processi rimasti da un'esecuzione precedente: li chiudo."
+    pkill -TERM -f -- "$PROFILO" 2>/dev/null; pkill -TERM -f -- "$SERVER_PY" 2>/dev/null
+    sleep 2
+    pkill -KILL -f -- "$PROFILO" 2>/dev/null; pkill -KILL -f -- "$SERVER_PY" 2>/dev/null
+fi
+
 ruota_log
 log_file "===== Avvio script v$VERSIONE_SCRIPT (PID $$, utente $(id -un)) ====="
-log "=== Avvio calendario web (v$VERSIONE_SCRIPT) ==="
+log "=== Avvio APA Calendario Dipendenti (v$VERSIONE_SCRIPT) ==="
 log "Sistema: ${SISTEMA:-sconosciuto}${MODELLO:+ ($MODELLO)} | utente: $(id -un) | sessione: $SESSIONE"
 log "Link CSV: $CSV_URL"
 
@@ -1162,7 +1202,7 @@ command -v xdotool >/dev/null && PRIMA=$(finestre_chromium)
 log "Apertura del calendario su $MON_NOME ($MON_X,$MON_Y)..."
 setsid "$BROWSER" \
     --user-data-dir="$PROFILO" \
-    --class="calendario-web" \
+    --class="apa-calendario-dipendenti" \
     "${OZONE_ARGS[@]}" \
     --window-position="$MON_X,$MON_Y" \
     --start-fullscreen \
@@ -1174,7 +1214,7 @@ setsid "$BROWSER" \
     --disable-features=Translate \
     --password-store=basic \
     --enable-logging=stderr \
-    --new-window "$URL_PAGINA" >>"$OUT" 2>&1 &
+    --new-window "$URL_PAGINA" >>"$OUT" 2>&1 9>&- &
 PID=$!
 log_file "Browser avviato (PID $PID, profilo $PROFILO)"
 
@@ -1202,7 +1242,7 @@ PASSO=5
 [ "$INTERVALLO_CONTROLLO" -lt "$PASSO" ] && PASSO=$INTERVALLO_CONTROLLO
 CONTROLLO=0; TRASCORSO=0
 while true; do
-    sleep "$PASSO" & wait $!
+    sleep "$PASSO" 9>&- & wait $!   # il sleep non deve ereditare il blocco di istanza unica
     TRASCORSO=$((TRASCORSO + PASSO))
     inoltra_console_browser
     [ "$TRASCORSO" -lt "$INTERVALLO_CONTROLLO" ] && continue
@@ -1260,9 +1300,9 @@ controlla_dipendenze() {
 }
 
 comando_terminale() {   # sintassi diversa per ogni terminale
-    if   command -v gnome-terminal    >/dev/null; then echo "gnome-terminal --title=\"Calendario\" --"
-    elif command -v lxterminal        >/dev/null; then echo "lxterminal --title=\"Calendario\" -e"
-    elif command -v xfce4-terminal    >/dev/null; then echo "xfce4-terminal --title=\"Calendario\" -x"
+    if   command -v gnome-terminal    >/dev/null; then echo "gnome-terminal --title=\"Calendario Dipendenti\" --"
+    elif command -v lxterminal        >/dev/null; then echo "lxterminal --title=\"Calendario Dipendenti\" -e"
+    elif command -v xfce4-terminal    >/dev/null; then echo "xfce4-terminal --title=\"Calendario Dipendenti\" -x"
     elif command -v konsole           >/dev/null; then echo "konsole -e"
     else echo "x-terminal-emulator -e"
     fi
@@ -1280,7 +1320,7 @@ gestisci_autostart() {
         cat << EOF > "$AUTOSTART_FILE"
 [Desktop Entry]
 Type=Application
-Name=Calendario Web
+Name=Calendario Dipendenti
 Comment=Avvio automatico calendario (pagina HTML da CSV)
 Exec=$(comando_terminale) "$SCRIPT_PATH"
 Icon=utilities-terminal
@@ -1300,6 +1340,25 @@ EOF
     echo
 }
 
+installa_comando() {   # crea il comando "apa-calendario-dipendenti"
+    echo -e "${CLR_HEAD}------------------------------------------------------------${CLR_RESET}"
+    echo -e "${CLR_HEAD}COMANDO DA TERMINALE${CLR_RESET}"
+    echo -e "${CLR_HEAD}------------------------------------------------------------${CLR_RESET}"
+    mkdir -p "$BIN_DIR"
+    ln -sf "$SCRIPT_PATH" "$COMANDO_PATH"
+    echo -e "${CLR_INFO}--> Comando installato: $COMANDO  ($COMANDO_PATH)${CLR_RESET}"
+    COMANDO_NOTA=""
+    case ":$PATH:" in
+        *":$BIN_DIR:"*) ;;
+        *)  if ! grep -q "$MARCATORE_PATH" "$USER_HOME/.bashrc" 2>/dev/null; then
+                printf '\nexport PATH="$HOME/.local/bin:$PATH" # %s\n' "$MARCATORE_PATH" >> "$USER_HOME/.bashrc"
+            fi
+            COMANDO_NOTA="apri un nuovo terminale (o esegui: source ~/.bashrc) prima di usarlo"
+            echo -e "${CLR_WARN}--> ~/.local/bin non era nel PATH: l'ho aggiunto a ~/.bashrc. $COMANDO_NOTA.${CLR_RESET}" ;;
+    esac
+    echo
+}
+
 scrivi_nota_log() {   # lascia traccia dell'operazione nel log completo
     mkdir -p "$LOG_DIR"
     printf '[%s] [INFO] Installer v%s: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$VERSIONE_INSTALLER" "$TIPO_TXT" >> "$LOG_DIR/calendario.log"
@@ -1309,6 +1368,7 @@ riepilogo_finale() {
     echo -e "${CLR_INFO}=== $1 ===${CLR_RESET}"
     echo "    Tipo di operazione: $TIPO_TXT"
     echo "    Script di avvio   : $SCRIPT_PATH"
+    echo "    Comando           : $COMANDO  (opzioni: $COMANDO --aiuto)${COMANDO_NOTA:+ - $COMANDO_NOTA}"
     echo "    Pagina e server   : $PAGE_PATH, $SERVER_PATH"
     echo "    Log completo      : $LOG_DIR/calendario.log  (include server e console del browser)"
     echo "    Solo errori       : $LOG_DIR/error.log"
@@ -1352,17 +1412,17 @@ case "$SCELTA" in
         mostra_header
         echo -e "${CLR_INFO}--> AVVIO INSTALLAZIONE...${CLR_RESET}"
         if [ -d "$TARGET_DIR" ]; then
-            echo -e "${CLR_WARN}AVVISO: La cartella 'calendario-web' esiste già in $TARGET_DIR.${CLR_RESET}"
+            echo -e "${CLR_WARN}AVVISO: La cartella 'apa-calendario-dipendenti' esiste già in $TARGET_DIR.${CLR_RESET}"
             echo -e "Se desideri aggiornarla scegli 'Reinstalla / Aggiorna' o 'Reinstalla da zero'."
             exit 1
         fi
         mostra_banner_tipo
-        avvisa_installazione_dual
         chiedi_config
         genera_pagina
         genera_server
         genera_script
         gestisci_autostart
+        installa_comando
         controlla_dipendenze
         scrivi_nota_log
         riepilogo_finale "INSTALLAZIONE COMPLETATA CON SUCCESSO"
@@ -1373,12 +1433,12 @@ case "$SCELTA" in
         echo -e "${CLR_INFO}--> AVVIO REINSTALLAZIONE / AGGIORNAMENTO...${CLR_RESET}"
         mostra_banner_tipo
         conferma_declassamento || exit 0
-        avvisa_installazione_dual
         chiedi_config
         genera_pagina
         genera_server
         genera_script
         gestisci_autostart
+        installa_comando
         controlla_dipendenze
         scrivi_nota_log
         riepilogo_finale "REINSTALLAZIONE / AGGIORNAMENTO COMPLETATO"
@@ -1390,7 +1450,6 @@ case "$SCELTA" in
         mostra_banner_tipo
         conferma_declassamento || exit 0
         [ "$TIPO" != "nuova" ] && TIPO_TXT="reinstallazione da zero ($TIPO_TXT)"
-        avvisa_installazione_dual
         # I valori precedenti sono già stati letti: restano come predefiniti anche dopo il purge
         funzione_purge
         chiedi_config
@@ -1398,6 +1457,7 @@ case "$SCELTA" in
         genera_server
         genera_script
         gestisci_autostart
+        installa_comando
         controlla_dipendenze
         scrivi_nota_log
         riepilogo_finale "REINSTALLAZIONE DA ZERO COMPLETATA"

@@ -1,9 +1,10 @@
 # APA Calendario Dipendenti
 
 ![Versione](https://img.shields.io/badge/versione-1.0-informational)
-![Licenza: MIT](https://img.shields.io/badge/Licenza-MIT-yellow.svg)
 ![Piattaforma](https://img.shields.io/badge/Piattaforma-Raspberry%20Pi%20OS%20%7C%20Ubuntu-blue)
 ![Shell](https://img.shields.io/badge/Shell-bash-green)
+![Licenza: MIT](https://img.shields.io/badge/Licenza-MIT-yellow.svg)
+
 
 Trasforma un Raspberry Pi o un PC Ubuntu in un **display a schermo intero per il calendario dei dipendenti**: i dati vengono letti da un file **CSV** (ad esempio un foglio Google pubblicato sul web), disegnati in una tabella colorata e mostrati in Chromium sul **monitor primario**. L'applicazione parte da sola all'accesso al desktop, si controlla in continuazione e chiude tutto in modo pulito in caso di errore.
 
